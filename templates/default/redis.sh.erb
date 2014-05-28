@@ -1,0 +1,116 @@
+#!/bin/bash
+#
+# Simple Redis init.d script conceived to work on Linux systems
+# as it does use of the /proc filesystem.
+
+### BEGIN INIT INFO
+# Provides:             redis_<%= @port %>
+# Required-Start:       $network $syslog
+# Required-Stop:        $network $syslog
+# Default-Start:        2 3 4 5
+# Default-Stop:         0 1 6
+# Short-Description:    redis_<%= @port %> (<%= @id %>)
+# Description:          redis_<%= @port %> id=<%= @id %> install_prefix=<%= @install_prefix %>
+### END INIT INFO
+
+REDISPORT=<%= @port %>
+EXEC="<%= @install_prefix %>/bin/redis-server"
+CLIEXEC="<%= @install_prefix %>/bin/redis-cli"
+LOGFILE=/var/log/redis/redis_${REDISPORT}.log
+PIDFILE=/var/run/redis/redis_${REDISPORT}.pid
+CONF="/etc/redis/redis_${REDISPORT}.conf"
+
+#ulimit setup on init execution
+ULIMIT=$(ulimit -n)
+#sum maxclients setting in all redis instances and /1024
+redis_totalconns=$(($(grep maxclients /etc/redis/redis*.conf |awk {'print $2'} | awk '{ sum+=$1} END {print sum}') / 1024))
+
+RETVAL=0
+
+if [ $redis_totalconns -eq 0 ]; then
+    redis_maxconns=10240
+else
+    ### This seems redundant, but its to prevent non 1024 increment ulimits
+    redis_maxconns=$((1024 * $redis_totalconns))
+fi
+
+#if the current ulimit is less than redis_maxconns, bump it up on process execution
+if [ $ULIMIT -lt $redis_maxconns ] || [ $ULIMIT -eq $redis_maxconns ]; then
+    ulimit -n $(($redis_maxconns + 1024))
+fi
+
+if ! [ -d /var/run/redis ]; then
+    /bin/mkdir -p /var/run/redis
+    /bin/chmod 2775 /var/run/redis
+    /bin/chown "<%= @username %>" /var/run/redis
+    /bin/chgrp "<%= @usergroup %>" /var/run/redis
+fi
+
+function do_start {
+    if [ -f $LOGFILE ]; then
+        TIMESTAMP=`date +%Y%m%d%s`
+        NEWLOG=$LOGFILE.$TIMESTAMP
+        /bin/mv $LOGFILE $NEWLOG
+        gzip -f -9 $NEWLOG
+    fi
+    if [ -f $PIDFILE ]; then
+        echo "$PIDFILE exists, checking for matching process."
+        pid=`/bin/cat $PIDFILE`
+        ps -p $pid
+        if [ $? -eq 0 ]; then
+            echo "Process already running"
+            exit 1
+        else
+            echo "No matching process, removing pid file"
+            rm $PIDFILE
+            echo "Starting Redis server..."
+            su -s "/bin/bash" -c  "$EXEC $CONF" "<%= @username %>"
+            RETVAL=$?
+        fi
+    else
+        echo "Starting Redis server..."
+        su -s "/bin/bash" -c  "$EXEC $CONF" "<%= @username %>"
+        RETVAL=$?
+    fi
+}
+
+function do_stop {
+    if [ ! -f $PIDFILE ]; then
+        echo "$PIDFILE does not exist, process is not running"
+    else
+        PID=$(cat $PIDFILE)
+        echo "Stopping ..."
+        $CLIEXEC -p $REDISPORT shutdown
+        while [ -x /proc/${PID} ]
+            do
+                echo "Waiting for Redis to shutdown ..."
+                sleep 1
+            done
+            echo "Redis stopped"
+    fi
+}
+
+case "$1" in
+    start)
+        do_start
+        ;;
+    stop)
+        do_stop
+        ;;
+    status)
+        if [ -f $PIDFILE ]; then
+            exit 0
+        else
+            exit 1
+        fi
+        ;;
+    restart)
+        do_stop
+        do_start
+        ;; 
+    *)
+        echo "available options: start stop restart status"
+        ;;
+esac
+
+exit $RETVAL
