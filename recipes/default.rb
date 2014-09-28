@@ -6,11 +6,12 @@
 #
 
 include_recipe "apt"
-include_recipe "build-essential"
 
 if node['redis']['package_url'].to_s.empty?
   raise "You must configure node[:redis][:package_url]"
 end
+
+EXE_FILE = "#{node['redis']['install_prefix']}/#{node['redis']['executable']}"
 
 bash "download redis package" do
   code <<-EOH
@@ -19,9 +20,15 @@ bash "download redis package" do
     mkdir "`basename #{node['redis']['build_dir']}`" || exit 2
   fi
   cd "#{node['redis']['build_dir']}" || exit 6
-  wget "#{node['redis']['package_url']}" --output-document=redis.deb || exit 9
+  # If the package_url is a Google Cloud Storage URL, then use gsutil to copy it
+  if echo "#{node['redis']['package_url']}" | grep "^gs://" > /dev/null; then
+    gsutil cp "#{node['redis']['package_url']}" redis.deb || exit 8
+  # Else anything else is a URL that wget can fetch
+  else
+    wget "#{node['redis']['package_url']}" --output-document=redis.deb || exit 9
+  fi
   EOH
-  not_if { ::File.exist?("#{node['redis']['executable']}") || ::File.exist?("#{node['redis']['build_dir']}/redis.deb") }
+  not_if { ::File.exist?(EXE_FILE) || ::File.exist?("#{node['redis']['build_dir']}/redis.deb") }
 end
 
 bash "install redis" do
@@ -29,7 +36,7 @@ bash "install redis" do
   code <<-EOH
   sudo dpkg -i redis.deb > redis.install_log 2>&1
   EOH
-  not_if { ::File.exist?("#{node['redis']['executable']}") }
+  not_if { ::File.exist?(EXE_FILE) }
 end
 
 bash "create redis group" do
@@ -37,7 +44,7 @@ bash "create redis group" do
   sudo addgroup --system "#{node['redis']['user_group']}"
   EOH
   # But don't do this if the user group already exists
-  not_if "grep '#{node['redis']['user_group']}' /etc/group"
+  not_if "awk -F: '$1 == \"#{node['redis']['user_group']}\" {print $3}' /etc/group"
 end
 
 # Create a redis user if necessary

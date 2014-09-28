@@ -39,7 +39,7 @@ of redis.
 ### attributes/default.rb
 
 ```ruby
-overrides['redis']['package_url'] = 'http://your.download-server.com/redis-2.8.9.deb'
+overrides['redis']['package_url'] = 'http://your.download-server.com/redis.deb'
 ```
 
 ### Examples
