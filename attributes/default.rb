@@ -25,7 +25,3 @@ default['redis']['user_group'] = "redis"
 
 # Populate this with the instances you want
 default['redis']['instances'] = []
-
-default['redis']['default'] = {
-    :loglevel => 'verbose',
-}
