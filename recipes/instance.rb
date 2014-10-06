@@ -42,6 +42,7 @@ node['redis']['instances'].each do |id, instance|
               :port => instance['port'],
               :max_memory => instance['max_memory'],
               :data_dir => data_dir,
+              :log_level => instance['log_level'].nil? ? 'notice' : instance['log_level'],
               :install_prefix => instance['install_prefix'].to_s.empty? ? node['redis']['install_prefix'] : instance['install_prefix'],
               :username => node['redis']['username'],
               :usergroup => node['redis']['user_group']
