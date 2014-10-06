@@ -23,7 +23,7 @@ CONF="/etc/redis/redis_${REDISPORT}.conf"
 #ulimit setup on init execution
 ULIMIT=$(ulimit -n)
 #sum maxclients setting in all redis instances and /1024
-redis_totalconns=$(($(grep maxclients /etc/redis/redis*.conf | grep -v '^[[:space:]]*#' |awk {'print $2'} | awk '{ sum+=$1} END {print sum}') / 1024))
+redis_totalconns=$(($(grep maxclients /etc/redis/redis*.conf | grep -v '^[[:space:]]*#' |awk {'print $2'} | awk 'BEGIN {sum=0} {sum+=$1} END {print sum}') / 1024))
 
 RETVAL=0
 
