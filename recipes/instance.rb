@@ -7,12 +7,12 @@
 
 # Initialize any server instances on the VM
 
-node["redis"]["instances"].each do |instance|
+node['redis']['instances'].each do |instance|
 
   # Compute the data directory for this instance
   # By default its the {base_data_dir}/{port}
   # But instances can override the data_dir if they want
-  data_dir = instance['data_dir'].to_s.empty? ? node['redis']['base_data_dir']+"/"+instance["port"].to_s : instance['data_dir']
+  data_dir = (instance['data_dir'].nil? || instance['data_dir'].to_s.empty?) ? "#{node['redis']['base_data_dir']}/#{instance['port']}" : instance['data_dir']
 
   # Create the data_dir for this instance if needed
   directory data_dir do
