@@ -5,16 +5,9 @@
 # Copyright 2014, Vubeology LLC
 #
 
-# Initialize any server instances on the VM based on the data_bag config
+# Initialize any server instances on the VM
 
-instances = { "instances" => [] }
-begin
-  instances = data_bag_item(node["redis"]["data_bag_name"], "instances")
-rescue
-  Chef::Log.info "No redis instances specified in #{node["redis"]["data_bag_name"]} data_bag"
-end
-
-instances["instances"].each do |instance|
+node["redis"]["instances"].each do |instance|
 
   # Compute the data directory for this instance
   # By default its the {base_data_dir}/{port}
@@ -34,7 +27,7 @@ instances["instances"].each do |instance|
   # Install the instance config
   template "/etc/redis/redis_#{instance['port']}.conf" do
     source "redis.conf.erb"
-    action :create_if_missing
+    action :create
     owner node['redis']['username']
     group node['redis']['user_group']
     mode 0644
@@ -45,13 +38,14 @@ instances["instances"].each do |instance|
               :install_prefix => instance['install_prefix'].to_s.empty? ? node['redis']['install_prefix'] : instance['install_prefix'],
               :username => node['redis']['username'],
               :usergroup => node['redis']['user_group']
+    notifies :restart, "service[redis_#{instance['port']}]"
   end
 
   # Install the instance init.d startup script
   # Install the instance config
   template "/etc/init.d/redis_#{instance['port']}" do
     source "redis.sh.erb"
-    action :create_if_missing
+    action :create
     owner "root"
     group "root"
     mode 0755
@@ -60,18 +54,13 @@ instances["instances"].each do |instance|
               :install_prefix => instance['install_prefix'].to_s.empty? ? node['redis']['install_prefix'] : instance['install_prefix'],
               :username => node['redis']['username'],
               :usergroup => node['redis']['user_group']
+    notifies :restart, "service[redis_#{instance['port']}]"
   end
 
-  # Make redis start when the VM boots
-  execute "update-rc.d redis_#{instance['port']}" do
-    command "sudo update-rc.d redis_#{instance['port']} defaults > /tmp/redis_#{instance['port']}.update-rc.d_log 2>&1"
-  end
-
-  # Start redis now if it is not already running
-  execute "start redis_#{instance['port']}" do
-    command "sudo /etc/init.d/redis_#{instance['port']} start > /tmp/redis_#{instance['port']}.startup_log 2>&1"
-    # But don't start it if it's already running
-    not_if "ps auxgww | grep -v grep | grep redis-server | grep #{instance['port']}"
+  # Start the service and enable it on machine boot
+  service "redis_#{instance['port']}" do
+    supports :restart => true
+    action [:start, :enable]
   end
 
 end
